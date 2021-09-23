@@ -45,33 +45,21 @@ pub struct OrderItem {
     pub price: f32,
 }
 
-pub struct OrderItems(Vec<OrderItem>);
-
-impl From<Vec<OrderItem>> for OrderItems {
-    fn from(value: Vec<OrderItem>) -> Self {
-        OrderItems(value)
-    }
+trait VecExt {
+    fn insert_or_merge(self, item: OrderItem) -> Self;
 }
 
-impl From<OrderItems> for Vec<OrderItem> {
-    fn from(value: OrderItems) -> Self {
-        value.0
-    }
-}
-
-impl OrderItems {
-    fn insert_or_merge(self, item: OrderItem) -> Self {
-        let mut list: Vec<OrderItem> = self.into();
-
-        list.iter_mut()
+impl VecExt for Vec<OrderItem> {
+    fn insert_or_merge(mut self, item: OrderItem) -> Self {
+        self.iter_mut()
             .find(|it| item.item_sku == it.item_sku)
             .map(|it| it.quantity += item.quantity)
             .or_else(|| {
-                list.push(item);
+                self.push(item);
                 Some(())
             });
 
-        OrderItems::from(list)
+        self
     }
 }
 
@@ -188,7 +176,7 @@ impl Aggregate for OrderAggregate {
             OrderEvent::ItemAdded { item, at } => {
                 if let OrderState::Editable { .. } = state.state {
                     state.state = OrderState::Editable { updated_at: at };
-                    state.items = OrderItems::from(state.items).insert_or_merge(item).into();
+                    state.items = state.items.insert_or_merge(item);
                     return Ok(state);
                 }
 
