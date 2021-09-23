@@ -1,5 +1,3 @@
-use std::fmt::{Display, Formatter, Result as FmtResult};
-
 use chrono::{DateTime, Utc};
 
 use async_trait::async_trait;
@@ -145,28 +143,19 @@ impl OrderEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum OrderError {
+    #[error("order has already been created")]
     AlreadyCreated,
+    #[error("order has not been created yet")]
     NotYetCreated,
+    #[error("order can't be edited anymore")]
     NotEditable,
+    #[error("order has already been cancelled")]
     AlreadyCompleted,
+    #[error("order has already been completed")]
     AlreadyCancelled,
 }
-
-impl Display for OrderError {
-    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
-        match self {
-            OrderError::AlreadyCreated => write!(fmt, "order has already been created"),
-            OrderError::NotYetCreated => write!(fmt, "order has not been created yet"),
-            OrderError::NotEditable => write!(fmt, "order can't be edited anymore"),
-            OrderError::AlreadyCancelled => write!(fmt, "order has already been cancelled"),
-            OrderError::AlreadyCompleted => write!(fmt, "order has already been completed"),
-        }
-    }
-}
-
-impl std::error::Error for OrderError {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct OrderAggregate;
