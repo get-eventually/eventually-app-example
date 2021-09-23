@@ -1,3 +1,5 @@
+#![deny(clippy::all)]
+
 use std::sync::Arc;
 
 use eventually::aggregate::Optional;
