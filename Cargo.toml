@@ -9,7 +9,6 @@ license = "MIT"
 eventually = { git = "https://github.com/get-eventually/eventually-rs.git", rev = "5e221e701e925437bee237c29414521828f68042", features = ["full"] }
 
 chrono = { version = "0.4.19", features = ["serde"] }
-#env_logger = "0.9.0"
 envconfig = "0.10.0"
 envconfig_derive = "0.10.0"
 futures = "0.3.17"
