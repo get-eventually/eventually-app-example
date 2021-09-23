@@ -2,6 +2,8 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use chrono::{DateTime, Utc};
 
+use async_trait::async_trait;
+
 use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 
@@ -23,10 +25,10 @@ impl Projection for TotalOrdersProjection {
     type Event = OrderEvent;
     type Error = std::convert::Infallible;
 
-    fn project<'a>(
-        &'a mut self,
+    fn project(
+        &mut self,
         event: Persisted<Self::SourceId, Self::Event>,
-    ) -> BoxFuture<'a, Result<(), Self::Error>> {
+    ) -> BoxFuture<Result<(), Self::Error>> {
         match event.take() {
             OrderEvent::Created { .. } => self.created += 1,
             OrderEvent::Completed { .. } => self.completed += 1,
@@ -66,7 +68,10 @@ impl OrderItems {
         list.iter_mut()
             .find(|it| item.item_sku == it.item_sku)
             .map(|it| it.quantity += item.quantity)
-            .or_else(|| Some(list.push(item)));
+            .or_else(|| {
+                list.push(item);
+                Some(())
+            });
 
         OrderItems::from(list)
     }
@@ -82,6 +87,7 @@ pub enum OrderState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
+    #[allow(unused)]
     #[serde(skip_serializing)]
     id: String,
     created_at: DateTime<Utc>,
@@ -164,6 +170,8 @@ impl std::error::Error for OrderError {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct OrderAggregate;
+
+#[async_trait]
 impl Aggregate for OrderAggregate {
     type Id = String;
     type State = Order;
@@ -226,47 +234,38 @@ impl Aggregate for OrderAggregate {
         }
     }
 
-    fn handle_first<'a, 's: 'a>(
-        &'a self,
-        id: &'s Self::Id,
+    async fn handle_first(
+        &self,
+        id: &Self::Id,
         command: Self::Command,
-    ) -> BoxFuture<'a, Result<Option<Vec<Self::Event>>, Self::Error>>
+    ) -> Result<Vec<Self::Event>, Self::Error>
     where
         Self: Sized,
     {
-        Box::pin(async move {
-            if let OrderCommand::Create = command {
-                return Ok(Some(vec![OrderEvent::Created {
-                    id: id.clone(),
-                    at: Utc::now(),
-                }]));
-            }
+        if let OrderCommand::Create = command {
+            return Ok(vec![OrderEvent::Created {
+                id: id.clone(),
+                at: Utc::now(),
+            }]);
+        }
 
-            Err(OrderError::NotYetCreated)
-        })
+        Err(OrderError::NotYetCreated)
     }
 
-    fn handle_next<'a, 's: 'a>(
-        &'a self,
-        _id: &'a Self::Id,
-        _state: &'s Self::State,
+    async fn handle_next(
+        &self,
+        _id: &Self::Id,
+        _state: &Self::State,
         command: Self::Command,
-    ) -> BoxFuture<'a, Result<Option<Vec<Self::Event>>, Self::Error>>
-    where
-        Self: Sized,
-    {
-        Box::pin(match command {
-            OrderCommand::Create => future::err(OrderError::AlreadyCreated),
-            OrderCommand::AddItem { item } => future::ok(Some(vec![OrderEvent::ItemAdded {
+    ) -> Result<Vec<Self::Event>, Self::Error> {
+        match command {
+            OrderCommand::Create => Err(OrderError::AlreadyCreated),
+            OrderCommand::AddItem { item } => Ok(vec![OrderEvent::ItemAdded {
                 item,
                 at: Utc::now(),
-            }])),
-            OrderCommand::Complete => {
-                future::ok(Some(vec![OrderEvent::Completed { at: Utc::now() }]))
-            }
-            OrderCommand::Cancel => {
-                future::ok(Some(vec![OrderEvent::Cancelled { at: Utc::now() }]))
-            }
-        })
+            }]),
+            OrderCommand::Complete => Ok(vec![OrderEvent::Completed { at: Utc::now() }]),
+            OrderCommand::Cancel => Ok(vec![OrderEvent::Cancelled { at: Utc::now() }]),
+        }
     }
 }

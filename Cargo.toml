@@ -6,21 +6,22 @@ authors = ["Danilo Cianfrone <danilocianfr@gmail.com>"]
 license = "MIT"
 
 [dependencies]
-eventually = { version = "0.4.0", features = ["full"] }
+eventually = { git = "https://github.com/get-eventually/eventually-rs.git", rev = "5e221e701e925437bee237c29414521828f68042", features = ["full"] }
 
 chrono = { version = "0.4.19", features = ["serde"] }
-env_logger = "0.9.0"
+#env_logger = "0.9.0"
 envconfig = "0.10.0"
 envconfig_derive = "0.10.0"
 futures = "0.3.17"
 log = "0.4.14"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
-smol = "1.2.5"
 tide = "0.16.0"
 tokio-postgres = "0.7.2"
 femme = "2.1.1"
 anyhow = "1.0.44"
+async-trait = "0.1.51"
+tokio = { version = "1.12.0", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 reqwest = { version = "0.11.4", features = ["json"] }

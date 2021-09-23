@@ -1,5 +1,4 @@
 use envconfig::Envconfig;
-use envconfig_derive::Envconfig;
 
 #[derive(Envconfig)]
 pub struct Config {
