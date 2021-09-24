@@ -2,9 +2,6 @@ use chrono::{DateTime, Utc};
 
 use async_trait::async_trait;
 
-use futures::future;
-use futures::future::{BoxFuture, FutureExt};
-
 use serde::{Deserialize, Serialize};
 
 use eventually::optional::Aggregate;
@@ -18,15 +15,16 @@ pub struct TotalOrdersProjection {
     cancelled: u64,
 }
 
+#[async_trait]
 impl Projection for TotalOrdersProjection {
     type SourceId = String;
     type Event = OrderEvent;
     type Error = std::convert::Infallible;
 
-    fn project(
+    async fn project(
         &mut self,
         event: Persisted<Self::SourceId, Self::Event>,
-    ) -> BoxFuture<Result<(), Self::Error>> {
+    ) -> Result<(), Self::Error> {
         match event.take() {
             OrderEvent::Created { .. } => self.created += 1,
             OrderEvent::Completed { .. } => self.completed += 1,
@@ -34,7 +32,7 @@ impl Projection for TotalOrdersProjection {
             _ => (),
         };
 
-        future::ok(()).boxed()
+        Ok(())
     }
 }
 

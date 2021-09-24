@@ -6,7 +6,7 @@ authors = ["Danilo Cianfrone <danilocianfr@gmail.com>"]
 license = "MIT"
 
 [dependencies]
-eventually = { git = "https://github.com/get-eventually/eventually-rs.git", rev = "5e221e701e925437bee237c29414521828f68042", features = ["full"] }
+eventually = { git = "https://github.com/get-eventually/eventually-rs.git", rev = "c4397f4e22ce5e94df397c31d0f20841de0fc95a", features = ["full"] }
 
 chrono = { version = "0.4.19", features = ["serde"] }
 envconfig = "0.10.0"
