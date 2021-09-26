@@ -1,9 +1,6 @@
-use std::fmt::{Display, Formatter, Result as FmtResult};
-
 use chrono::{DateTime, Utc};
 
-use futures::future;
-use futures::future::{BoxFuture, FutureExt};
+use async_trait::async_trait;
 
 use serde::{Deserialize, Serialize};
 
@@ -18,15 +15,16 @@ pub struct TotalOrdersProjection {
     cancelled: u64,
 }
 
+#[async_trait]
 impl Projection for TotalOrdersProjection {
     type SourceId = String;
     type Event = OrderEvent;
     type Error = std::convert::Infallible;
 
-    fn project<'a>(
-        &'a mut self,
+    async fn project(
+        &mut self,
         event: Persisted<Self::SourceId, Self::Event>,
-    ) -> BoxFuture<'a, Result<(), Self::Error>> {
+    ) -> Result<(), Self::Error> {
         match event.take() {
             OrderEvent::Created { .. } => self.created += 1,
             OrderEvent::Completed { .. } => self.completed += 1,
@@ -34,7 +32,7 @@ impl Projection for TotalOrdersProjection {
             _ => (),
         };
 
-        future::ok(()).boxed()
+        Ok(())
     }
 }
 
@@ -45,30 +43,21 @@ pub struct OrderItem {
     pub price: f32,
 }
 
-pub struct OrderItems(Vec<OrderItem>);
-
-impl From<Vec<OrderItem>> for OrderItems {
-    fn from(value: Vec<OrderItem>) -> Self {
-        OrderItems(value)
-    }
+trait VecExt {
+    fn insert_or_merge(self, item: OrderItem) -> Self;
 }
 
-impl From<OrderItems> for Vec<OrderItem> {
-    fn from(value: OrderItems) -> Self {
-        value.0
-    }
-}
-
-impl OrderItems {
-    fn insert_or_merge(self, item: OrderItem) -> Self {
-        let mut list: Vec<OrderItem> = self.into();
-
-        list.iter_mut()
+impl VecExt for Vec<OrderItem> {
+    fn insert_or_merge(mut self, item: OrderItem) -> Self {
+        self.iter_mut()
             .find(|it| item.item_sku == it.item_sku)
             .map(|it| it.quantity += item.quantity)
-            .or_else(|| Some(list.push(item)));
+            .or_else(|| {
+                self.push(item);
+                Some(())
+            });
 
-        OrderItems::from(list)
+        self
     }
 }
 
@@ -82,6 +71,7 @@ pub enum OrderState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
+    #[allow(unused)]
     #[serde(skip_serializing)]
     id: String,
     created_at: DateTime<Utc>,
@@ -139,31 +129,24 @@ impl OrderEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum OrderError {
+    #[error("order has already been created")]
     AlreadyCreated,
+    #[error("order has not been created yet")]
     NotYetCreated,
+    #[error("order can't be edited anymore")]
     NotEditable,
+    #[error("order has already been cancelled")]
     AlreadyCompleted,
+    #[error("order has already been completed")]
     AlreadyCancelled,
 }
 
-impl Display for OrderError {
-    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
-        match self {
-            OrderError::AlreadyCreated => write!(fmt, "order has already been created"),
-            OrderError::NotYetCreated => write!(fmt, "order has not been created yet"),
-            OrderError::NotEditable => write!(fmt, "order can't be edited anymore"),
-            OrderError::AlreadyCancelled => write!(fmt, "order has already been cancelled"),
-            OrderError::AlreadyCompleted => write!(fmt, "order has already been completed"),
-        }
-    }
-}
-
-impl std::error::Error for OrderError {}
-
 #[derive(Debug, Clone, Copy)]
 pub struct OrderAggregate;
+
+#[async_trait]
 impl Aggregate for OrderAggregate {
     type Id = String;
     type State = Order;
@@ -191,7 +174,7 @@ impl Aggregate for OrderAggregate {
             OrderEvent::ItemAdded { item, at } => {
                 if let OrderState::Editable { .. } = state.state {
                     state.state = OrderState::Editable { updated_at: at };
-                    state.items = OrderItems::from(state.items).insert_or_merge(item).into();
+                    state.items = state.items.insert_or_merge(item);
                     return Ok(state);
                 }
 
@@ -226,47 +209,38 @@ impl Aggregate for OrderAggregate {
         }
     }
 
-    fn handle_first<'a, 's: 'a>(
-        &'a self,
-        id: &'s Self::Id,
+    async fn handle_first(
+        &self,
+        id: &Self::Id,
         command: Self::Command,
-    ) -> BoxFuture<'a, Result<Option<Vec<Self::Event>>, Self::Error>>
+    ) -> Result<Vec<Self::Event>, Self::Error>
     where
         Self: Sized,
     {
-        Box::pin(async move {
-            if let OrderCommand::Create = command {
-                return Ok(Some(vec![OrderEvent::Created {
-                    id: id.clone(),
-                    at: Utc::now(),
-                }]));
-            }
+        if let OrderCommand::Create = command {
+            return Ok(vec![OrderEvent::Created {
+                id: id.clone(),
+                at: Utc::now(),
+            }]);
+        }
 
-            Err(OrderError::NotYetCreated)
-        })
+        Err(OrderError::NotYetCreated)
     }
 
-    fn handle_next<'a, 's: 'a>(
-        &'a self,
-        _id: &'a Self::Id,
-        _state: &'s Self::State,
+    async fn handle_next(
+        &self,
+        _id: &Self::Id,
+        _state: &Self::State,
         command: Self::Command,
-    ) -> BoxFuture<'a, Result<Option<Vec<Self::Event>>, Self::Error>>
-    where
-        Self: Sized,
-    {
-        Box::pin(match command {
-            OrderCommand::Create => future::err(OrderError::AlreadyCreated),
-            OrderCommand::AddItem { item } => future::ok(Some(vec![OrderEvent::ItemAdded {
+    ) -> Result<Vec<Self::Event>, Self::Error> {
+        match command {
+            OrderCommand::Create => Err(OrderError::AlreadyCreated),
+            OrderCommand::AddItem { item } => Ok(vec![OrderEvent::ItemAdded {
                 item,
                 at: Utc::now(),
-            }])),
-            OrderCommand::Complete => {
-                future::ok(Some(vec![OrderEvent::Completed { at: Utc::now() }]))
-            }
-            OrderCommand::Cancel => {
-                future::ok(Some(vec![OrderEvent::Cancelled { at: Utc::now() }]))
-            }
-        })
+            }]),
+            OrderCommand::Complete => Ok(vec![OrderEvent::Completed { at: Utc::now() }]),
+            OrderCommand::Cancel => Ok(vec![OrderEvent::Cancelled { at: Utc::now() }]),
+        }
     }
 }

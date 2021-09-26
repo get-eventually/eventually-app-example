@@ -8,8 +8,8 @@ use envconfig::Envconfig;
 
 use lazy_static::lazy_static;
 
-use eventually_app_example::config::Config;
 use eventually_app_example::order::Order;
+use eventually_app_example::Config;
 
 static START: Once = Once::new();
 
@@ -20,10 +20,13 @@ lazy_static! {
 fn setup() {
     START.call_once(|| {
         thread::spawn(move || {
-            let config = Config::init().unwrap();
+            let config = Config::init_from_env().unwrap();
             SERVER_STARTED.store(true, std::sync::atomic::Ordering::SeqCst);
 
-            smol::run(eventually_app_example::run(config)).expect("don't fail :(");
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(eventually_app_example::run(config))
+                .expect("don't fail :(");
         });
     });
 
@@ -31,27 +34,25 @@ fn setup() {
     while !SERVER_STARTED.load(std::sync::atomic::Ordering::SeqCst) {}
 }
 
-#[test]
-fn it_creates_an_order_successfully() {
+#[tokio::test]
+async fn it_creates_an_order_successfully() {
     setup();
 
-    smol::run(async {
-        let url = format!("http://localhost:8080/orders/test/create");
-        let client = reqwest::Client::new();
+    let url = "http://localhost:8080/orders/test/create".to_string();
+    let client = reqwest::Client::new();
 
-        let start = Utc::now();
+    let start = Utc::now();
 
-        let root: Order = client
-            .post(&url)
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap();
+    let root: Order = client
+        .post(&url)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
 
-        assert!(root.created_at() >= start);
-        assert!(root.is_editable());
-        assert!(root.items().is_empty());
-    });
+    assert!(root.created_at() >= start);
+    assert!(root.is_editable());
+    assert!(root.items().is_empty());
 }

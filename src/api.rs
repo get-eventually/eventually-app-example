@@ -10,8 +10,8 @@ use serde::Deserialize;
 
 use tide::{Body, Error, Request, Response, StatusCode};
 
-use crate::order::*;
-use crate::state::*;
+use crate::order::{OrderCommand, OrderEvent, OrderItem};
+use crate::state::AppState;
 
 pub(crate) async fn full_history(req: Request<AppState>) -> Result<Response, Error> {
     #[derive(Deserialize)]
@@ -58,7 +58,7 @@ pub(crate) async fn history(req: Request<AppState>) -> Result<Response, Error> {
         from: Option<DateTime<Utc>>,
     }
 
-    let id: String = req.param("id")?;
+    let id = req.param("id")?.to_string();
     let params: Params = req.query()?;
     let from = params.from;
 
@@ -85,7 +85,7 @@ pub(crate) async fn history(req: Request<AppState>) -> Result<Response, Error> {
 }
 
 pub(crate) async fn get_order(req: Request<AppState>) -> Result<Response, Error> {
-    let id: String = req.param("id")?;
+    let id = req.param("id")?.to_string();
 
     let root = req
         .state()
@@ -102,7 +102,7 @@ pub(crate) async fn get_order(req: Request<AppState>) -> Result<Response, Error>
 }
 
 pub(crate) async fn create_order(req: Request<AppState>) -> Result<Response, Error> {
-    let id: String = req.param("id")?;
+    let id = req.param("id")?.to_string();
 
     let mut root = req.state().builder.build(id);
 
@@ -129,7 +129,7 @@ pub(crate) async fn create_order(req: Request<AppState>) -> Result<Response, Err
 pub(crate) async fn add_order_item(mut req: Request<AppState>) -> Result<Response, Error> {
     let item: OrderItem = req.body_json().await?;
 
-    let id: String = req.param("id")?;
+    let id = req.param("id")?.to_string();
 
     let mut root = req
         .state()
@@ -159,7 +159,7 @@ pub(crate) async fn add_order_item(mut req: Request<AppState>) -> Result<Respons
 }
 
 pub(crate) async fn complete_order(req: Request<AppState>) -> Result<Response, Error> {
-    let id: String = req.param("id")?;
+    let id = req.param("id")?.to_string();
 
     let mut root = req
         .state()
@@ -189,7 +189,7 @@ pub(crate) async fn complete_order(req: Request<AppState>) -> Result<Response, E
 }
 
 pub(crate) async fn cancel_order(req: Request<AppState>) -> Result<Response, Error> {
-    let id: String = req.param("id")?;
+    let id = req.param("id")?.to_string();
 
     let mut root = req
         .state()

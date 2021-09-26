@@ -1,9 +1,4 @@
-#![allow(missing_docs)]
-
-mod api;
-pub mod config;
-pub mod order;
-mod state;
+#![deny(clippy::all)]
 
 use std::sync::Arc;
 
@@ -13,7 +8,12 @@ use eventually::subscription::Transient as TransientSubscription;
 use eventually::sync::RwLock;
 use eventually::{AggregateRootBuilder, Repository};
 
-use crate::config::Config;
+mod api;
+mod config;
+pub use config::Config;
+pub mod order;
+mod state;
+
 use crate::order::{OrderAggregate, TotalOrdersProjection};
 
 pub async fn run(config: Config) -> anyhow::Result<()> {
@@ -57,7 +57,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     let mut app = tide::new();
 
     app.at("/orders").nest({
-        let mut api = tide::with_state(state::AppState {
+        let mut api = tide::with_state(crate::state::AppState {
             store,
             builder: aggregate_root_builder,
             repository,
